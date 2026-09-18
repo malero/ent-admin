@@ -1,6 +1,13 @@
 # Ent Admin architecture
 
-Status: phase-one implementation contract, prepared during SDD Step 2.
+Status: phase-one implementation architecture, prepared during SDD Step 2 and
+finalized during SDD Step 8.
+
+The module currently targets Go 1.25.0. Ent v0.14.5's schema loader uses
+`go/packages`; the newer `golang.org/x/tools` generation dependency selected
+for the installed Go 1.27 development toolchain requires that baseline. The
+public runtime contracts remain standard-library-only; this is a generator
+toolchain constraint discovered and recorded during Step 3.
 
 ## Purpose and scope
 
@@ -32,7 +39,9 @@ github.com/malero/ent-admin/
 ├── entc/                   # public Ent extension (Step 3)
 ├── internal/ui/            # generic Templ components (Step 5)
 ├── example/                # reproducible Ent + SQLite example (Step 7)
+├── README.md               # setup, mounting, and example guide
 ├── docs/architecture.md
+├── docs/phase-one-report.md
 └── docs/vsn-feedback.md
 ```
 
@@ -161,9 +170,9 @@ The UI is generic and lives below the runtime boundary:
 3. Internal Templ components render the layout, index, list, and optional
    detail page.
 4. The same handlers return complete HTML for ordinary browser requests.
-5. One list refresh interaction may return an HTML fragment when VSN sends its
-   verified legacy XHR marker; the browser can still follow the ordinary link
-   and receive a complete page when JavaScript is unavailable.
+5. The list page adds a VSN detail preview using `vsn-get`, `vsn-target`, and
+   `vsn-swap`; the browser can still follow the ordinary link and receive a
+   complete page when JavaScript is unavailable.
 
 Generated packages do not know about templates. This preserves one renderer,
 keeps generated output deterministic, and leaves future themes/components
@@ -171,14 +180,14 @@ inside the runtime/UI layer.
 
 ## VSN decision and compatibility constraint
 
-The development environment contains VSN `0.1.124` under the local
-`node_modules` tree. Its inspectable API registers `vsn-xhr` and `vsn-on`
-attributes and sends `X-Requested-With: XMLHttpRequest` for enhanced requests.
-The local sources and sibling bundled asset did not expose the newer
-`Engine`, `autoMount`, `vsn-get`, `vsn-target`, or `vsn-swap` names described in
-some adjacent documentation. Phase one therefore targets the verified
-legacy API, serves/pins the exact asset used by the example, and records
-development feedback in `docs/vsn-feedback.md` during Step 6.
+The development environment contains the VSN source repository at
+`/Users/mattroberts/Projects/vsn`, package version `1.0.15`, source revision
+`32c7e21`. Its inspectable API exposes `Engine`, `autoMount`, `vsn-get`,
+`vsn-target`, and `vsn-swap`. `vsn-get` sends `HX-Request: true` plus target
+metadata and swaps the response body into the configured target. Phase one
+vendors the exact `dist/index.min.js` build under `internal/ui/assets/`,
+serves it below the configured base path, and records development feedback in
+`docs/vsn-feedback.md`.
 
 The enhancement is progressive: the server has a full-page HTML fallback,
 and the VSN request is an optimization over the same route rather than the

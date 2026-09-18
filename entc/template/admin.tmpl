@@ -1,0 +1,104 @@
+{{ define "entadmin" }}
+{{ template "header" $ }}
+
+import (
+	"context"
+	"fmt"
+	"strconv"
+
+	entadmin "github.com/malero/ent-admin"
+)
+
+// AdminRegistry binds the generated read-only readers to client.
+func AdminRegistry(client *Client) entadmin.Registry {
+	return entadmin.Registry{
+		Entities: []entadmin.Entity{
+{{- range $n := adminNodes $.Nodes }}
+			{
+				Name:        {{ quote $n.Name }},
+				Label:       {{ quote (adminLabel $n.Label) }},
+				PluralLabel: {{ quote (adminLabel $n.Table) }},
+				Route:       {{ quote $n.Table }},
+				ID: entadmin.Field{
+					Name:      {{ quote $n.ID.Name }},
+					Label:     {{ quote (adminLabel $n.ID.Name) }},
+					Kind:      {{ adminFieldKind $n.ID }},
+					Optional:  {{ $n.ID.Optional }},
+					Nillable:  {{ $n.ID.Nillable }},
+					Immutable: {{ $n.ID.Immutable }},
+					Sensitive: {{ $n.ID.Sensitive }},
+				},
+				Fields: []entadmin.Field{
+{{- range $f := $n.Fields }}
+					{
+						Name:       {{ quote $f.Name }},
+						Label:      {{ quote (adminLabel $f.Name) }},
+						Kind:       {{ adminFieldKind $f }},
+						Optional:   {{ $f.Optional }},
+						Nillable:   {{ $f.Nillable }},
+						Immutable:  {{ $f.Immutable }},
+						Sensitive:  {{ $f.Sensitive }},
+						EnumValues: []string{ {{ range $i, $value := $f.EnumValues }}{{ if $i }}, {{ end }}{{ quote $value }}{{ end }} },
+					},
+{{- end }}
+				},
+				Reader: &entAdmin{{ $n.Name }}Reader{client: client},
+			},
+{{- end }}
+		},
+	}
+}
+
+{{ range $n := adminNodes $.Nodes }}
+type entAdmin{{ $n.Name }}Reader struct {
+	client *Client
+}
+
+func (r *entAdmin{{ $n.Name }}Reader) List(ctx context.Context, opts entadmin.ListOptions) (entadmin.ListResult, error) {
+	query := r.client.{{ $n.Name }}.Query()
+	if opts.Offset > 0 {
+		query = query.Offset(opts.Offset)
+	}
+	if opts.Limit > 0 {
+		query = query.Limit(opts.Limit)
+	}
+	rows, err := query.All(ctx)
+	if err != nil {
+		return entadmin.ListResult{}, err
+	}
+	records := make([]entadmin.Record, 0, len(rows))
+	for _, row := range rows {
+		records = append(records, entAdmin{{ $n.Name }}Record(row))
+	}
+	return entadmin.ListResult{Records: records}, nil
+}
+
+func (r *entAdmin{{ $n.Name }}Reader) Get(ctx context.Context, id string) (entadmin.Record, error) {
+	parsed, err := entAdmin{{ $n.Name }}ID(id)
+	if err != nil {
+		return entadmin.Record{}, err
+	}
+	row, err := r.client.{{ $n.Name }}.Get(ctx, parsed)
+	if err != nil {
+		if IsNotFound(err) {
+			return entadmin.Record{}, entadmin.ErrNotFound
+		}
+		return entadmin.Record{}, err
+	}
+	return entAdmin{{ $n.Name }}Record(row), nil
+}
+
+func entAdmin{{ $n.Name }}Record(row *{{ $n.Name }}) entadmin.Record {
+	return entadmin.Record{
+		ID: fmt.Sprint(row.ID),
+		Values: map[string]any{
+{{- range $f := $n.Fields }}
+			{{ quote $f.Name }}: {{ adminFieldValue $f "row" }},
+{{- end }}
+		},
+	}
+}
+
+{{ adminIDParser $n }}
+{{ end }}
+{{ end }}

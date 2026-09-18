@@ -1,0 +1,188 @@
+package ui
+
+import (
+	"github.com/malero/ent-admin/internal/view"
+)
+
+templ pageComponent(page view.Page) {
+	<!doctype html>
+	<html lang="en">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>{ page.Title }</title>
+			<style>
+				:root { color-scheme: light; font-family: system-ui, sans-serif; }
+				body { margin: 0; color: #1f2937; background: #f8fafc; }
+				header { background: #172033; color: white; }
+				header .inner, main { max-width: 60rem; margin: 0 auto; padding: 1rem 1.25rem; }
+				header .inner { display: flex; align-items: center; justify-content: space-between; }
+				header a { color: white; text-decoration: none; font-weight: 700; }
+				main { padding-top: 2rem; padding-bottom: 3rem; }
+				a { color: #2563eb; }
+				nav { color: #64748b; font-size: 0.9rem; margin-bottom: 1rem; }
+				h1 { color: #111827; margin-top: 0; }
+				.card, table { background: white; border: 1px solid #e2e8f0; border-radius: 0.5rem; box-shadow: 0 1px 2px #0f172a0d; }
+				.card { padding: 1rem 1.25rem; }
+				.entity-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.75rem; }
+				.entity-list a { display: block; padding: 1rem 1.25rem; }
+				.entity-list small { display: block; color: #64748b; margin-top: 0.25rem; }
+				table { border-collapse: separate; border-spacing: 0; overflow: hidden; width: 100%; }
+				th, td { padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+				th { color: #475569; font-size: 0.8rem; letter-spacing: 0.04em; text-transform: uppercase; background: #f8fafc; }
+				tbody tr:last-child td { border-bottom: 0; }
+				.muted { color: #64748b; }
+				.error { border-left: 0.3rem solid #dc2626; }
+				.preview-heading { display: flex; justify-content: space-between; gap: 1rem; align-items: start; margin-bottom: 1rem; }
+				.preview-heading h2 { margin: 0.25rem 0 0; color: #111827; }
+				.preview-heading p { margin: 0; }
+				dl { display: grid; grid-template-columns: minmax(8rem, 0.3fr) 1fr; margin: 0; }
+				dt, dd { padding: 0.8rem 0; border-bottom: 1px solid #e2e8f0; }
+				dt { color: #475569; font-weight: 600; }
+				dd { margin: 0; }
+			</style>
+		</head>
+		<body>
+			<header>
+				<div class="inner">
+					<a href={ templ.URL(pathFor(page.BasePath, "")) }>Ent Admin</a>
+					<span>Read-only phase-one preview</span>
+				</div>
+			</header>
+			<main>
+				if page.Kind == view.PageIndex {
+					@indexPage(page)
+				} else if page.Kind == view.PageList {
+					@listPage(page)
+				} else if page.Kind == view.PageDetail {
+					@detailPage(page)
+				} else {
+					@errorPage(page)
+				}
+			</main>
+			<script type="module" src={ templ.URL(pathFor(page.BasePath, "assets/vsn.min.js")) } auto-mount></script>
+		</body>
+	</html>
+}
+
+templ indexPage(page view.Page) {
+	<nav><a href={ templ.URL(pathFor(page.BasePath, "")) }>Home</a></nav>
+	<h1>Ent Admin</h1>
+	<p class="muted">Registered entity types</p>
+	if len(page.Entities) == 0 {
+		<div class="card">No entities are registered.</div>
+	} else {
+		<ul class="entity-list">
+			for _, entity := range page.Entities {
+				<li class="card">
+					<a href={ templ.URL(entityPath(page.BasePath, entity.Route)) }>{ entity.PluralLabel }</a>
+					<small>{ entity.Name }</small>
+				</li>
+			}
+		</ul>
+	}
+}
+
+templ listPage(page view.Page) {
+	if page.Entity != nil {
+		<nav>
+			<a href={ templ.URL(pathFor(page.BasePath, "")) }>Home</a>
+			<span> / { page.Entity.PluralLabel }</span>
+		</nav>
+		<h1>{ page.Entity.PluralLabel }</h1>
+		if len(page.Records) == 0 {
+			<div class="card">No records found.</div>
+		} else {
+			<table>
+				<thead>
+					<tr>
+						<th>ID</th>
+						for _, field := range page.Entity.Fields {
+							<th>{ field.Label }</th>
+						}
+					</tr>
+				</thead>
+				<tbody>
+					for _, record := range page.Records {
+						<tr>
+							<td>
+								<a href={ templ.URL(recordPath(page.BasePath, page.Entity.Route, record.ID)) }>{ record.ID }</a>
+								<span> </span>
+								<a
+									class="preview-link"
+									href={ templ.URL(recordPath(page.BasePath, page.Entity.Route, record.ID)) }
+									vsn-get={ templ.URL(recordPath(page.BasePath, page.Entity.Route, record.ID)) }
+									vsn-target="#record-preview"
+									vsn-swap="inner"
+									aria-controls="record-preview"
+								>Preview</a>
+							</td>
+							for _, field := range page.Entity.Fields {
+								<td>@fieldValue(field, record)</td>
+							}
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+		<div id="record-preview" class="card" aria-live="polite">
+			<p class="muted">Choose Preview to load a record without leaving this page.</p>
+		</div>
+	}
+}
+
+templ fieldValue(field view.Field, record view.Record) {
+	if field.Sensitive {
+		<span class="muted">Redacted</span>
+	} else {
+		{ displayValue(record.Values[field.Name]) }
+	}
+}
+
+templ detailPage(page view.Page) {
+	if page.Entity != nil && page.Record != nil {
+		<nav>
+			<a href={ templ.URL(pathFor(page.BasePath, "")) }>Home</a>
+			<span> / </span>
+			<a href={ templ.URL(entityPath(page.BasePath, page.Entity.Route)) }>{ page.Entity.PluralLabel }</a>
+			<span> / { page.Record.ID }</span>
+		</nav>
+		<h1>{ page.Title }</h1>
+		<div class="card">
+			<dl>
+				for _, field := range page.Entity.Fields {
+					<dt>{ field.Label }</dt>
+					<dd>@fieldValue(field, *page.Record)</dd>
+				}
+			</dl>
+		</div>
+	}
+}
+
+templ detailFragment(page view.Page) {
+	if page.Entity != nil && page.Record != nil {
+		<article>
+			<div class="preview-heading">
+				<div>
+					<p class="muted">Record preview</p>
+					<h2>{ page.Title }</h2>
+				</div>
+				<a href={ templ.URL(recordPath(page.BasePath, page.Entity.Route, page.Record.ID)) }>Open full record</a>
+			</div>
+			<dl>
+				for _, field := range page.Entity.Fields {
+					<dt>{ field.Label }</dt>
+					<dd>@fieldValue(field, *page.Record)</dd>
+				}
+			</dl>
+		</article>
+	}
+}
+
+templ errorPage(page view.Page) {
+	<nav><a href={ templ.URL(pathFor(page.BasePath, "")) }>Home</a></nav>
+	<div class="card error">
+		<h1>{ page.Title }</h1>
+		<p>{ page.Error }</p>
+	</div>
+}
